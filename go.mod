@@ -1,4 +1,4 @@
-module github.com/imperatrona/twitter-scraper
+module github.com/Toeplitz/twitter-scraper-auth-fix
 
 go 1.16
 
