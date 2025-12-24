@@ -175,53 +175,72 @@ func (s *Scraper) getFlowToken(data map[string]interface{}) (string, error) {
 
 	return info.FlowToken, err
 }
-
 func cookieValue(jar http.CookieJar, u *url.URL, name string) string {
-    if jar == nil || u == nil {
-        return ""
-    }
-    for _, c := range jar.Cookies(u) {
-        if c.Name == name {
-            return c.Value
-        }
-    }
-    return ""
+	if jar == nil || u == nil {
+		return ""
+	}
+	for _, c := range jar.Cookies(u) {
+		if c.Name == name {
+			return c.Value
+		}
+	}
+	return ""
 }
 
 func (s *Scraper) IsLoggedIn() bool {
-    u, _ := url.Parse("https://api.x.com/1.1/account/verify_credentials.json?include_email=true&skip_status=false&include_entities=true")
-
-    req, _ := http.NewRequest("GET", u.String(), nil)
-
-    ct0 := cookieValue(s.cookieJar, u, "ct0")          // or wherever your jar lives
-    auth := cookieValue(s.cookieJar, u, "auth_token")
-
-    // Some jars store cookies on twitter.com instead of x.com; try both.
-    if ct0 == "" || auth == "" {
-        u2, _ := url.Parse("https://twitter.com/")
-        if ct0 == "" {
-            ct0 = cookieValue(s.cookieJar, u2, "ct0")
-        }
-        if auth == "" {
-            auth = cookieValue(s.cookieJar, u2, "auth_token")
-        }
-    }
-
-    s.applyVerifyCredentialsHeaders(req, ct0, auth)
-
+	// verify_credentials endpoint
+	u, err := url.Parse("https://api.x.com/1.1/account/verify_credentials.json?include_email=true&skip_status=false&include_entities=true")
 	if err != nil {
 		return false
 	}
+
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return false
+	}
+
+	jar := s.client.Jar
+
+	// Try cookies for api.x.com first
+	ct0 := cookieValue(jar, u, "ct0")
+	auth := cookieValue(jar, u, "auth_token")
+
+	// Fallback: some jars store for twitter.com or x.com (different host)
+	if ct0 == "" || auth == "" {
+		uTw, _ := url.Parse("https://twitter.com/")
+		uX, _ := url.Parse("https://x.com/")
+
+		if ct0 == "" {
+			if v := cookieValue(jar, uTw, "ct0"); v != "" {
+				ct0 = v
+			} else {
+				ct0 = cookieValue(jar, uX, "ct0")
+			}
+		}
+		if auth == "" {
+			if v := cookieValue(jar, uTw, "auth_token"); v != "" {
+				auth = v
+			} else {
+				auth = cookieValue(jar, uX, "auth_token")
+			}
+		}
+	}
+
+	s.applyVerifyCredentialsHeaders(req, ct0, auth)
+
 	var verify verifyCredentials
 	err = s.RequestAPI(req, &verify)
-	if err != nil || verify.Errors != nil {
+	if err != nil || len(verify.Errors) > 0 {
 		s.isLogged = false
-		s.setBearerToken(bearerToken)
-	} else {
-		s.isLogged = true
+		// keep whatever your code expects here:
+		s.setBearerToken(bearerToken2) // or bearerToken1/bearerToken2 depending on your lib
+		return false
 	}
-	return s.isLogged
+
+	s.isLogged = true
+	return true
 }
+
 
 
 // randomDelay introduces a random delay between 1 and 3 seconds
