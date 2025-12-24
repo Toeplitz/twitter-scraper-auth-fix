@@ -33,10 +33,10 @@ const (
 
 	// This is the same token shown in the gist (percent-encoded there).
 	// Keep it configurable because it can change.
-	const webBearerToken = "AAAAAAAAAAAAAAAAAAAAAFXzAwAAAAAAMHCxpeSDG1gLNLghVe8d74hl6k4%3DRUMF4xAQLsbeBhTSRrCiQpJtxoGWeyHrDb5te2jpGskWDFW82F"
+	webBearerToken = "AAAAAAAAAAAAAAAAAAAAAFXzAwAAAAAAMHCxpeSDG1gLNLghVe8d74hl6k4%3DRUMF4xAQLsbeBhTSRrCiQpJtxoGWeyHrDb5te2jpGskWDFW82F"
 	
 	// The gist notes the endpoint only works with TwitterAndroid UA.
-	const androidUA = "TwitterAndroid/10.21.1"
+	androidUA = "TwitterAndroid/10.21.1"
 )
 
 type (
