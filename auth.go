@@ -29,6 +29,14 @@ const (
 	bearerToken2      = "AAAAAAAAAAAAAAAAAAAAAFQODgEAAAAAVHTp76lzh3rFzcHbmHVvQxYYpTw%3DckAlMINMjmCwxUcaXbAN4XqJVdgMJaHqNOFgPMK0zN1qLqLQCF"
 	appConsumerKey    = "3nVuSoBZnx6U4vzUxf5w"
 	appConsumerSecret = "Bcs59EFbbsdF6Sl9Ng71smgStWEGwXXKSjYvPVt7qys"
+	// auth.go (or a shared constants file)
+
+	// This is the same token shown in the gist (percent-encoded there).
+	// Keep it configurable because it can change.
+	const webBearerToken = "AAAAAAAAAAAAAAAAAAAAAFXzAwAAAAAAMHCxpeSDG1gLNLghVe8d74hl6k4%3DRUMF4xAQLsbeBhTSRrCiQpJtxoGWeyHrDb5te2jpGskWDFW82F"
+	
+	// The gist notes the endpoint only works with TwitterAndroid UA.
+	const androidUA = "TwitterAndroid/10.21.1"
 )
 
 type (
@@ -85,6 +93,26 @@ func (s *Scraper) getAccessToken(consumerKey, consumerSecret string) (string, er
 	}
 	return a.AccessToken, nil
 }
+
+func (s *Scraper) applyVerifyCredentialsHeaders(req *http.Request, ct0, authToken string) {
+    req.Header.Set("Authorization", "Bearer "+webBearerToken)
+
+    // Force Android UA for this endpoint (matches the gist).
+    req.Header.Set("User-Agent", androidUA)
+
+    if ct0 != "" {
+        req.Header.Set("x-csrf-token", ct0)
+    }
+
+    // Ensure cookies are present even if the jar is flaky / domain mismatches.
+    if ct0 != "" {
+        req.AddCookie(&http.Cookie{Name: "ct0", Value: ct0})
+    }
+    if authToken != "" {
+        req.AddCookie(&http.Cookie{Name: "auth_token", Value: authToken})
+    }
+}
+
 
 func (s *Scraper) getFlow(data map[string]interface{}) (*flow, error) {
 	headers := http.Header{
@@ -148,11 +176,39 @@ func (s *Scraper) getFlowToken(data map[string]interface{}) (string, error) {
 	return info.FlowToken, err
 }
 
-// IsLoggedIn check if scraper logged in
+func cookieValue(jar http.CookieJar, u *url.URL, name string) string {
+    if jar == nil || u == nil {
+        return ""
+    }
+    for _, c := range jar.Cookies(u) {
+        if c.Name == name {
+            return c.Value
+        }
+    }
+    return ""
+}
+
 func (s *Scraper) IsLoggedIn() bool {
-	s.isLogged = true
-	s.setBearerToken(bearerToken1)
-	req, err := http.NewRequest("GET", "https://api.twitter.com/1.1/account/verify_credentials.json", nil)
+    u, _ := url.Parse("https://api.x.com/1.1/account/verify_credentials.json?include_email=true&skip_status=false&include_entities=true")
+
+    req, _ := http.NewRequest("GET", u.String(), nil)
+
+    ct0 := cookieValue(s.cookieJar, u, "ct0")          // or wherever your jar lives
+    auth := cookieValue(s.cookieJar, u, "auth_token")
+
+    // Some jars store cookies on twitter.com instead of x.com; try both.
+    if ct0 == "" || auth == "" {
+        u2, _ := url.Parse("https://twitter.com/")
+        if ct0 == "" {
+            ct0 = cookieValue(s.cookieJar, u2, "ct0")
+        }
+        if auth == "" {
+            auth = cookieValue(s.cookieJar, u2, "auth_token")
+        }
+    }
+
+    s.applyVerifyCredentialsHeaders(req, ct0, auth)
+
 	if err != nil {
 		return false
 	}
@@ -166,6 +222,7 @@ func (s *Scraper) IsLoggedIn() bool {
 	}
 	return s.isLogged
 }
+
 
 // randomDelay introduces a random delay between 1 and 3 seconds
 func randomDelay() {
